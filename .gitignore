@@ -1,0 +1,27 @@
+# Environments
+venv/
+.venv/
+env/
+.env
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Application specific
+# Ignore generated PDF summaries
+*.pdf
+
+# Logs
+*.log
+logs/
+
+# IDE / OS files
+.idea/
+.vscode/
+__MACOSX
+.DS_Store
+
+# pytest
+.pytest_cache/
