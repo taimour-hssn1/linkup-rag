@@ -86,19 +86,23 @@ def generate_summary(req: TranscriptRequest):
     final_summary = final_chain.invoke({"combined": combined_text})
     print(final_summary)
 
+    return {
+        "summary_content": final_summary
+    }
+
     # 1. Create a PDF and save it locally with the room_id name
-    pdf_filename = f"{req.room_id}.pdf"
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        # Fix encoding issues that FPDF might encounter with emojis or special markdown
-        encoded_summary = final_summary.encode('latin-1', 'replace').decode('latin-1')
-        pdf.multi_cell(0, 10, txt=encoded_summary)
-        pdf.output(pdf_filename)
-        print(f"Successfully saved PDF to {pdf_filename}")
-    except Exception as e:
-        print(f"Error creating PDF: {e}")
+    # pdf_filename = f"{req.room_id}.pdf"
+    # try:
+    #     pdf = FPDF()
+    #     pdf.add_page()
+    #     pdf.set_font("Arial", size=12)
+    #     # Fix encoding issues that FPDF might encounter with emojis or special markdown
+    #     encoded_summary = final_summary.encode('latin-1', 'replace').decode('latin-1')
+    #     pdf.multi_cell(0, 10, txt=encoded_summary)
+    #     pdf.output(pdf_filename)
+    #     print(f"Successfully saved PDF to {pdf_filename}")
+    # except Exception as e:
+    #     print(f"Error creating PDF: {e}")
 
     # 2. AWS S3 Upload (Commented out until credentials are available)
     # import boto3
@@ -117,6 +121,6 @@ def generate_summary(req: TranscriptRequest):
     # except Exception as e:
     #     print(f"Failed to upload to S3: {e}")
 
-    return {
-        "s3_link": pdf_filename   # keep same key for Spring Boot
-    }
+    # return {
+    #     "s3_link": pdf_filename   # keep same key for Spring Boot
+    # }
