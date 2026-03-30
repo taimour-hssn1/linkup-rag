@@ -46,11 +46,11 @@ def generate_summary(req: TranscriptRequest):
     vectors = []
     for i, (chunk, embedding) in enumerate(zip(chunk_texts, embeddings)):
         vectors.append({
-            "id": f"{req.meeting_id}-chunk-{i}",
+            "id": f"{req.room_id}-chunk-{i}",
             "values": embedding,
             "metadata": {
                 "chunk_index":i,
-                "meeting_id": req.meeting_id,
+                "room_id": req.room_id,
                 "chunk_text": chunk
             }
         })
@@ -86,8 +86,8 @@ def generate_summary(req: TranscriptRequest):
     final_summary = final_chain.invoke({"combined": combined_text})
     print(final_summary)
 
-    # 1. Create a PDF and save it locally with the meeting_id name
-    pdf_filename = f"{req.meeting_id}.pdf"
+    # 1. Create a PDF and save it locally with the room_id name
+    pdf_filename = f"{req.room_id}.pdf"
     try:
         pdf = FPDF()
         pdf.add_page()

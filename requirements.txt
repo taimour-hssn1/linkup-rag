@@ -28,7 +28,7 @@ fpdf==1.7.2
 frozenlist==1.8.0
 fsspec==2026.3.0
 google-ai-generativelanguage==0.6.15
-google-api-core==2.30.0
+google-api-core
 google-api-python-client==2.193.0
 google-auth==2.49.1
 google-auth-httplib2==0.3.0
@@ -36,7 +36,7 @@ googleapis-common-protos==1.73.0
 greenlet==3.3.2
 groq==0.37.1
 grpcio==1.78.0
-grpcio-status==1.71.2
+grpcio-status
 h11==0.16.0
 hf-xet==1.4.2
 httpcore==1.0.9
@@ -90,7 +90,7 @@ pinecone-plugin-assistant==3.0.3
 pinecone-plugin-interface==0.0.7
 propcache==0.4.1
 proto-plus==1.27.1
-protobuf==5.29.6
+protobuf
 psycopg2-binary==2.9.11
 pyasn1==0.6.3
 pyasn1_modules==0.4.2
