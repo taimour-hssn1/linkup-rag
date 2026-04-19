@@ -1,5 +1,9 @@
 from pydantic import BaseModel
 
 class TranscriptRequest(BaseModel):
-    room_id: int
+    room_id: str
     transcript: str
+
+class QueryRequest(BaseModel):
+    room_id: str
+    query: str
