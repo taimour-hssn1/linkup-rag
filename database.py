@@ -18,5 +18,4 @@ if "transcripts" not in existing_indexes:
             region="us-east-1"
         )
     )
-
 index = pc.Index("transcripts")

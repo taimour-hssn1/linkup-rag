@@ -63,7 +63,7 @@ def generate_summary(req: TranscriptRequest):
                 "chunk_text": chunk
             }
         })
-    index.upsert(vectors=vectors)
+    index.upsert(req.room_id, vectors=vectors)
     print(f"Stored {len(vectors)} chunk in pinecone")
 
     print(req.transcript)
@@ -163,9 +163,9 @@ def query_summary(req: QueryRequest):
 
     # 2. Query pinecone directly using the same 'index' object
     res = index.query(
+        namespace=req.room_id,
         vector=query_embedding,
         top_k=3,
-        filter={"room_id": req.room_id},
         include_metadata=True
     )
 
@@ -195,4 +195,4 @@ def query_summary(req: QueryRequest):
 
     return {
         "response": response
-    }
+    }   
