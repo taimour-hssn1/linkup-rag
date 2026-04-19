@@ -59,7 +59,6 @@ def generate_summary(req: TranscriptRequest):
             "values": embedding,
             "metadata": {
                 "chunk_index":i,
-                "room_id": req.room_id,
                 "chunk_text": chunk
             }
         })
