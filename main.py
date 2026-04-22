@@ -62,7 +62,8 @@ def generate_summary(req: TranscriptRequest):
                 "chunk_text": chunk
             }
         })
-    index.upsert(req.room_id, vectors=vectors)
+
+    index.upsert( vectors=vectors)
     print(f"Stored {len(vectors)} chunk in pinecone")
 
     print(req.transcript)
