@@ -1,42 +1,21 @@
 from fastapi import FastAPI
-from models import TranscriptRequest, QueryRequest
-
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-
-from database import index
-
 from dotenv import load_dotenv
 import os
-import requests
-from fpdf import FPDF
 
+from models import TranscriptRequest, QueryRequest, SmartQueryRequest
+from database import index
+from llm_config import embeddings_model, groq_chat, output_parser
+from agent_service import smart_router, run_parallel_subagents, orchestrate, query_summary
 
-app = FastAPI()
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from templates import CHUNK_SUMMARY_PROMPT, FINAL_SUMMARY_PROMPT
+
 load_dotenv()
-# Initialize the client using the provided key
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# Initialize models globally so they are reused across requests
-embeddings_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
-
-groq_chat = ChatGroq(
-    api_key=GROQ_API_KEY,
-    model_name="llama-3.1-8b-instant"
-)
-
-output_parser = StrOutputParser()
-
+app = FastAPI()
 
 @app.post("/generate-summary")
 def generate_summary(req: TranscriptRequest):
-
     docs = [Document(page_content=req.transcript)]
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -46,7 +25,6 @@ def generate_summary(req: TranscriptRequest):
         is_separator_regex=False,
     )
     
-
     chunks = text_splitter.split_documents(docs)
     chunk_texts = [chunk.page_content for chunk in chunks]
 
@@ -58,32 +36,17 @@ def generate_summary(req: TranscriptRequest):
             "id": f"{req.room_id}-chunk-{i}",
             "values": embedding,
             "metadata": {
+                "room_id": req.room_id,
                 "chunk_index":i,
                 "chunk_text": chunk
             }
         })
 
-    index.upsert( vectors=vectors)
+    index.upsert(vectors=vectors)
     print(f"Stored {len(vectors)} chunk in pinecone")
-
     print(req.transcript)
 
-    chunk_prompt = ChatPromptTemplate.from_template(
-        """ You are summarizing a segment of a meeting transcript.
-            Extract and retain:
-            - Key decisions made
-            - Action items or tasks assigned
-            - Important discussion points
-
-            Be concise. Output only the summary, no preamble.
-
-            TRANSCRIPT SEGMENT:
-            {chunk}
-
-            SUMMARY:"""
-    )
-
-    chain = chunk_prompt | groq_chat | output_parser
+    chain = CHUNK_SUMMARY_PROMPT | groq_chat | output_parser
 
     chunk_summaries = []
     for chunk_text in chunk_texts:
@@ -91,26 +54,7 @@ def generate_summary(req: TranscriptRequest):
         chunk_summaries.append(chunk_summary)
 
     combined_text = "\n\n".join(chunk_summaries)
-    final_prompt = ChatPromptTemplate.from_template(
-        """ You are an expert meeting summarizer. Below are partial summaries extracted from a meeting transcript.
-
-            Your task is to synthesize these into a single, polished final summary.
-
-            PARTIAL SUMMARIES:
-            {combined}
-
-            INSTRUCTIONS:
-            - Merge overlapping or repeated information into unified points
-            - Preserve all unique decisions, action items, and key discussions
-            - Maintain a professional, neutral tone
-            - Be concise but comprehensive — do not omit critical details
-            - Do NOT include phrases like "this summary covers..." or "the meeting discussed..."
-            - Output ONLY the final summary text, no headers, no preamble, no meta-commentary
-
-            FINAL SUMMARY:"""
-    )
-
-    final_chain = final_prompt | groq_chat | output_parser
+    final_chain = FINAL_SUMMARY_PROMPT | groq_chat | output_parser
     final_summary = final_chain.invoke({"combined": combined_text})
     print(final_summary)
 
@@ -153,46 +97,41 @@ def generate_summary(req: TranscriptRequest):
     #     "s3_link": pdf_filename   # keep same key for Spring Boot
     # }
 
+@app.post("/query")
+def query_smart(req: SmartQueryRequest):  
+    count = len(req.room_ids)
 
+    print(req)
+    if count == 1:
+        # Path 1: Direct subagent, no routing needed
+        qreq = QueryRequest(
+            room_id=req.room_ids[0],
+            query=req.query
+        )
+        result = query_summary(qreq)
+        return {"response": result}
 
-@app.post('/query')
-def query_summary(req: QueryRequest):
-    
-    # 1. Embed query
-    query_embedding = embeddings_model.embed_query(req.query)
+    elif count > 1:
+        # Path 2: Parallel subagents + orchestrator
+        results = run_parallel_subagents(req.room_ids, req.query)
+        return {"response": orchestrate(results, req.query)}
 
-    # 2. Query pinecone directly using the same 'index' object
-    res = index.query(
-        namespace=req.room_id,
-        vector=query_embedding,
-        top_k=3,
-        include_metadata=True
-    )
-
-    # 3. Extract the text chunks from the response metadata
-    context_chunks = [match["metadata"]["chunk_text"] for match in res["matches"] if "chunk_text" in match["metadata"]]
-    context = "\n\n".join(context_chunks)
-    print("Retrieved context:\n", context)
-
-    # 4. Query LLM
-    prompt = ChatPromptTemplate.from_template("""You are a helpful assistant answering questions about a meeting.
-
-            Use ONLY the context below to answer. Do not add information from outside the context.
-            If the answer is not in the context, say: "I don't have enough information from this meeting to answer that."
-
-            Context:
-            {context}
-
-            Question:
-            {question}
-
-            Answer:"""
-    )
-
-    chain = prompt | groq_chat | output_parser
-    response = chain.invoke({"context": context, "question": req.query})
-    print("LLM Response:\n", response)
-
-    return {
-        "response": response
-    }   
+    else:
+        # Path 3: 0 meetings = Router decides
+        resolved_ids = smart_router(req.query, req.user_id)
+        
+        if not resolved_ids:
+            return {"response": "Meeting not available. Please specify a more precise date, meeting title, or select meetings manually."}
+        
+        print(resolved_ids)
+        if len(resolved_ids) == 1:
+            qreq = QueryRequest(
+                room_id=resolved_ids[0],
+                query=req.query
+            )
+            result = query_summary(qreq)
+            return {"response": result}
+        
+        # Parallel pass if routing resulted in >1 meetings
+        results = run_parallel_subagents(resolved_ids, req.query)
+        return {"response": orchestrate(results, req.query)}
