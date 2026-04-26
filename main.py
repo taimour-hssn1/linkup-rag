@@ -110,7 +110,6 @@ def generate_summary(req: TranscriptRequest):
 def query_smart(req: SmartQueryRequest):  
     count = len(req.room_ids)
 
-    print(req)
     if count == 1:
         # Path 1: Direct subagent, no routing needed
         qreq = QueryRequest(
@@ -118,7 +117,7 @@ def query_smart(req: SmartQueryRequest):
             query=req.query
         )
         result = query_summary(qreq)
-        return result
+        return {"response": result}
 
     elif count > 1:
         # Path 2: Parallel subagents + orchestrator
@@ -129,8 +128,8 @@ def query_smart(req: SmartQueryRequest):
         # Path 3: 0 meetings = Router decides
         resolved_ids = smart_router(req.query, req.user_id)
         
-        if not resolved_ids:
-            return {"response": "Meeting not available. Please specify a more precise date, meeting title, or select meetings manually."}
+        # if not resolved_ids:
+        #     return {"response": "Meeting not available. Please specify a more precise date, meeting title, or select meetings manually."}
         
         print(resolved_ids)
         if len(resolved_ids) == 1:
@@ -139,7 +138,7 @@ def query_smart(req: SmartQueryRequest):
                 query=req.query
             )
             result = query_summary(qreq)
-            return result
+            return {"response": result}
         
         # Parallel pass if routing resulted in >1 meetings
         results = run_parallel_subagents(resolved_ids, req.query)

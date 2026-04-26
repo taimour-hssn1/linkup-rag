@@ -7,8 +7,7 @@ load_dotenv()
 db = os.getenv("PINECONE_DB")
 pc = Pinecone(api_key=db)
 
-existing_indexes = pc.list_indexes().names()
-if "transcripts" not in existing_indexes:
+try:
     pc.create_index(
         name="transcripts",
         dimension=384,
@@ -18,4 +17,8 @@ if "transcripts" not in existing_indexes:
             region="us-east-1"
         )
     )
+except Exception as e:
+    if "ALREADY_EXISTS" not in str(e):
+        raise e
+
 index = pc.Index("transcripts")

@@ -10,7 +10,6 @@ class QueryRequest(BaseModel):
     room_id: str
     query: str
 
-
 class SmartQueryRequest(BaseModel):
     query: str
     user_id: str

@@ -1,3 +1,4 @@
+import re
 import json
 from concurrent.futures import ThreadPoolExecutor
 
@@ -30,9 +31,7 @@ def query_summary(req: QueryRequest):
     response = chain.invoke({"context": context, "question": req.query})
     print("LLM Response:\n", response)
 
-    return {
-        "response": response
-    }   
+    return response   
 
 def run_parallel_subagents(room_ids: list, query: str) -> dict:
     with ThreadPoolExecutor() as executor:
@@ -63,12 +62,12 @@ def orchestrate(results: dict, query: str) -> str:
     final_response = chain.invoke({"combined": combined_text, "query": query})
     return final_response
 
+
 def smart_router(query: str, user_id: str) -> list:
     """
     Determines which room_ids are relevant based on the user's query and their available meetings.
     """
     all_meetings = get_all_meetings_for_user(user_id)
-    print(all_meetings)
     if not all_meetings:
         return []
 
@@ -76,41 +75,40 @@ def smart_router(query: str, user_id: str) -> list:
         f"- room_id: {m['room_id']}, title: {m['title']}, date: {m['date']}, time: {m['time']}"
         for m in all_meetings
     ])
-    print(meeting_list)
+
     chain = ROUTER_PROMPT | groq_chat | output_parser
     result = chain.invoke({
         "query": query,
         "meeting_list": meeting_list,
         "today": get_today()
     })
-    print("Result:", result)
+    print("Router raw result:", result)
+
     try:
-        import re
-        # Find all JSON arrays of strings in the output to bypass any yapping or generated code
-        matches = re.findall(r'\[\s*(?:"[^"]*"\s*(?:,\s*"[^"]*"\s*)*)?\]', result)
+        # Extract all JSON arrays from output, take the longest (most complete) match
+        matches = re.findall(r'\[.*?\]', result, re.DOTALL)
         if matches:
-            # Take the last match as it's most likely the final output
-            clean_result = matches[-1]
+            clean_result = max(matches, key=len)
         else:
-            # Fallback to simple stripping
             clean_result = result.replace('```json', '').replace('```', '').strip()
-            
+
         room_ids = json.loads(clean_result)
-        
-        if not isinstance(room_ids, list):
+
+        # Guard against null, non-list, or empty responses
+        if not room_ids or not isinstance(room_ids, list):
             return []
 
-        # Validate against real meetings to prevent hallucinations
-        valid_ids = [m["room_id"] for m in all_meetings]
+        # Validate strictly against real meeting IDs — no fuzzy matching
+        valid_ids = {m["room_id"] for m in all_meetings}  # set for O(1) lookup
         final_ids = []
         for r in room_ids:
-            # Check for exact match or if the LLM hallucinated a prefix like "room-id-"
-            for v in valid_ids:
-                if r == v or r.endswith(v) or v.endswith(r):
-                    if v not in final_ids:
-                        final_ids.append(v)
-                    break
+            if r in valid_ids:
+                final_ids.append(r)
+            else:
+                print(f"⚠️ Skipping invalid or hallucinated room_id: '{r}'")
+
         return final_ids
+
     except Exception as e:
-        print(f"Failed to parse LLM router response: {e}\nResponse was: {result}")
+        print(f"❌ Failed to parse router response: {e}\nRaw response: {result}")
         return []
