@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 
@@ -13,6 +14,14 @@ from templates import CHUNK_SUMMARY_PROMPT, FINAL_SUMMARY_PROMPT
 
 load_dotenv()
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/generate-summary")
 def generate_summary(req: TranscriptRequest):
@@ -109,7 +118,7 @@ def query_smart(req: SmartQueryRequest):
             query=req.query
         )
         result = query_summary(qreq)
-        return {"response": result}
+        return result
 
     elif count > 1:
         # Path 2: Parallel subagents + orchestrator
@@ -130,7 +139,7 @@ def query_smart(req: SmartQueryRequest):
                 query=req.query
             )
             result = query_summary(qreq)
-            return {"response": result}
+            return result
         
         # Parallel pass if routing resulted in >1 meetings
         results = run_parallel_subagents(resolved_ids, req.query)
