@@ -94,9 +94,9 @@ def smart_router(query: str, user_id: str) -> list:
 
         room_ids = json.loads(clean_result)
 
-        # Guard against null, non-list, or empty responses
+        # Guard against null, non-list, or empty responses — fall back to all IDs
         if not room_ids or not isinstance(room_ids, list):
-            return []
+            return [m["room_id"] for m in all_meetings]
 
         # Validate strictly against real meeting IDs — no fuzzy matching
         valid_ids = {m["room_id"] for m in all_meetings}  # set for O(1) lookup
@@ -111,4 +111,5 @@ def smart_router(query: str, user_id: str) -> list:
 
     except Exception as e:
         print(f"❌ Failed to parse router response: {e}\nRaw response: {result}")
-        return []
+        # Fall back to all meeting IDs so the query still runs across everything
+        return [m["room_id"] for m in all_meetings]
